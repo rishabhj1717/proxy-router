@@ -1,6 +1,6 @@
-# ALB — In-House Application Load Balancer
+# Dyamic Regex based proxy — In-House Reverse proxy solution for dev environments in K8s
 
-A dynamic, regex-based reverse proxy for Kubernetes sandbox environments.
+A dynamic, regex-based reverse proxy for Kubernetes development environments.
 Written in Go, backed by SQLite (WAL mode), with a dual-port architecture:
 - **:8080** — Data plane (proxies traffic to backends)
 - **:9090** — Admin API (manage routes dynamically)
