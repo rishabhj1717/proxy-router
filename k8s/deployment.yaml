@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox-alb-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alb-data
+  namespace: sandbox-alb-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: gp3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alb
+  namespace: sandbox-alb-system
+  labels:
+    app.kubernetes.io/name: alb
+    app.kubernetes.io/component: load-balancer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alb
+  strategy:
+    type: Recreate         # SQLite is single-writer — never RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alb
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault   # declared once here, applies to all containers
+      containers:
+        - name: alb
+          image: <router_image>
+          imagePullPolicy: Always
+          ports:
+            - name: proxy
+              containerPort: 8080   # FIX: matches ALB_LISTEN_ADDR below
+              protocol: TCP
+            - name: admin
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: ALB_LISTEN_ADDR
+              value: ":8080"        # FIX: was :8081, now matches containerPort "proxy"
+            - name: ALB_ADMIN_ADDR
+              value: ":9090"
+            - name: ALB_DB_PATH
+              value: "/data/alb.db"
+            - name: ALB_DIAL_TIMEOUT_SEC
+              value: "5"
+            - name: ALB_RESPONSE_TIMEOUT_SEC
+              value: "30"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1024Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            # FIX: removed duplicate seccompProfile — inherited from pod level
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: alb-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alb-proxy-router
+  namespace: sandbox-alb-system
+  labels:
+    app.kubernetes.io/name: alb
+spec:
+  selector:
+    app.kubernetes.io/name: alb
+  ports:
+    - name: fproxy
+      port: 8080
+      targetPort: 8080   # resolves to containerPort 8080 ✓
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alb-admin
+  namespace: sandbox-alb-system
+  labels:
+    app.kubernetes.io/name: alb
+spec:
+  selector:
+    app.kubernetes.io/name: alb
+  ports:
+    - name: admin
+      port: 9090
+      targetPort: 9090   # resolves to containerPort 9090 ✓
+  type: ClusterIP

@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alb-sa
+  namespace: alb-system
+  labels:
+    app.kubernetes.io/name: alb
+    app.kubernetes.io/component: load-balancer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alb-route-watcher
+  labels:
+    app.kubernetes.io/name: alb
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alb-route-watcher-binding
+  labels:
+    app.kubernetes.io/name: alb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alb-route-watcher
+subjects:
+  - kind: ServiceAccount
+    name: alb-sa
+    namespace: alb-system
